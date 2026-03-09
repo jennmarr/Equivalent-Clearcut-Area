@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watershed Delineation Workflow</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #d4c5b0;
+            min-height: 100vh;
+            padding: 2rem;
+            overflow: auto;
+        }
+
+        h1 {
+            color: #4a5644;
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            display: flex;
+            gap: 2rem;
+            align-items: flex-start;
+        }
+
+        .main-content {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .flowchart-wrapper {
+            background: #d4c5b0;
+            border-radius: 0;
+            padding: 2rem;
+            overflow: auto;
+            min-height: 600px;
+            cursor: grab;
+        }
+
+        .flowchart-wrapper:active {
+            cursor: grabbing;
+        }
+
+        .flowchart-container {
+            transform-origin: 0 0;
+            transition: transform 0.1s ease-out;
+        }
+
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            min-width: 100%;
+        }
+
+        /* Code Cell Styles - Dark Mode */
+        .code-cell {
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            margin-bottom: 2rem;
+        }
+
+        .code-cell-content {
+            padding: 0;
+        }
+
+        .code-block {
+            margin: 0;
+            padding: 1.5rem;
+            background: #1e1e1e;
+            overflow-x: auto;
+        }
+
+        .code-block code {
+            font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: #d4d4d4;
+            display: block;
+            white-space: pre;
+        }
+
+        /* Dark Mode Syntax highlighting */
+        .keyword { color: #569cd6; font-weight: 500; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; font-style: italic; }
+        .function { color: #dcdcaa; }
+        .number { color: #b5cea8; }
+        .variable { color: #9cdcfe; }
+        .input-placeholder { color: #d16969; font-style: italic; font-weight: 500; }
+
+        .code-section {
+            margin-bottom: 0;
+        }
+
+        .code-section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            padding: 0.75rem 1rem;
+            background: #f0e8d8;
+            border: 1px solid #a89a82;
+            border-radius: 6px;
+        }
+
+        .code-section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #4a5644;
+            margin: 0;
+        }
+
+        .code-help-text {
+            font-size: 0.9rem;
+            color: #6b7c63;
+            font-style: italic;
+        }
+
+        /* Legend Styles */
+        .legend {
+            background: #e8dcc8;
+            border: 2px solid #a89a82;
+            border-radius: 8px;
+            padding: 1.5rem;
+            width: 280px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .legend-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #7a6f5d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #a89a82;
+            padding-bottom: 0.5rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 0.85rem;
+            font-size: 0.9rem;
+            color: #4a5644;
+        }
+
+        .legend-shape {
+            width: 40px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .shape-rounded {
+            width: 36px;
+            height: 24px;
+            background: transparent;
+            border: 2px solid #8b9d83;
+            border-radius: 15px;
+        }
+
+        .shape-box-dashed {
+            width: 36px;
+            height: 24px;
+            background: transparent;
+            border: 2px dashed #8b9d83;
+            border-radius: 3px;
+        }
+
+        .shape-box {
+            width: 36px;
+            height: 24px;
+            background: transparent;
+            border: 2px solid #8b9d83;
+            border-radius: 3px;
+        }
+
+        .shape-circle {
+            width: 26px;
+            height: 26px;
+            background: transparent;
+            border: 2px solid #8b9d83;
+            border-radius: 50%;
+        }
+
+        .shape-diamond {
+            width: 22px;
+            height: 22px;
+            background: transparent;
+            border: 2px solid #8b9d83;
+            transform: rotate(45deg);
+        }
+
+        .shape-parallelogram {
+            width: 38px;
+            height: 22px;
+            background: transparent;
+            border-top: 2px solid #8b9d83;
+            border-bottom: 2px solid #8b9d83;
+            border-left: 2px solid #8b9d83;
+            border-right: 2px solid #8b9d83;
+            transform: skewX(-15deg);
+        }
+
+        ::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(139, 157, 131, 0.1);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #8b9d83;
+            border-radius: 6px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7c63;
+        }
+
+        /* Dark scrollbar for code cells */
+        .code-block::-webkit-scrollbar {
+            height: 10px;
+        }
+
+        .code-block::-webkit-scrollbar-track {
+            background: #252526;
+        }
+
+        .code-block::-webkit-scrollbar-thumb {
+            background: #424242;
+            border-radius: 4px;
+        }
+
+        .code-block::-webkit-scrollbar-thumb:hover {
+            background: #4e4e4e;
+        }
+
+        @media (max-width: 1400px) {
+            .container {
+                flex-direction: column-reverse;
+            }
+
+            .legend {
+                width: 100%;
+                max-width: 400px;
+                margin: 0 auto;
+            }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 1.8rem;
+            }
+
+            .flowchart-wrapper {
+                padding: 1rem;
+            }
+
+            .code-block code {
+                font-size: 0.8rem;
+            }
+
+            .code-block {
+                padding: 1rem;
+            }
+
+            .code-section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Watershed Delineation Workflow</h1>
+    
+    <div class="container">
+        <div class="main-content">
+            <!-- Flowchart -->
+            <div class="flowchart-wrapper" id="flowchart-wrapper">
+                <div class="flowchart-container" id="flowchart-container">
+                    <div class="mermaid">
+                        %%{init: {'theme':'base', 'themeVariables': { 
+                            'primaryColor':'#e8dcc8',
+                            'primaryTextColor':'#3d4a37',
+                            'primaryBorderColor':'#8b9d83',
+                            'lineColor':'#8b9d83',
+                            'secondaryColor':'#c4d4bc',
+                            'tertiaryColor':'#a8c5e0',
+                            'fontSize':'16px',
+                            'fontFamily':'Inter'
+                        }}}%%
+                        flowchart LR
+                            InputDEM((Input DEM)) -.-> EnvMgr1
+                            
+                            Start([START]) --> EnvMgr1[Environment Setup<br/>Cell Size 1m<br/>Snap to DEM]
+                            
+                            EnvMgr1 --> FillSinks[Fill Sinks<br/>arcpy.sa.Fill]
+                            
+                            FillSinks --> FlowDir[Flow Direction<br/>arcpy.sa.FlowDirection<br/>D8 Method]
+                            
+                            FlowDir --> FlowAccum[Flow Accumulation<br/>arcpy.sa.FlowAccumulation<br/>FLOAT D8]
+                            
+                            FlowAccum --> EnvMgr2[Environment Setup<br/>Cell Size 30m<br/>Snap to DEM]
+                            
+                            InputPour((Input Pour Point)) -.-> SnapPour
+                            SearchDist((Search Distance<br/>Parameter)) -.-> SnapPour
+                            
+                            EnvMgr2 --> SnapPour[Snap Pour Point<br/>arcpy.sa.SnapPourPoint]
+                            
+                            SnapPour --> Watershed[Delineate Watershed<br/>arcpy.sa.Watershed]
+                            
+                            Watershed --> Review{Results<br/>Satisfactory?}
+                            
+                            Review -->|No| IterateBack[/Adjust:<br/>Pour Point Location<br/>Search Distance/]
+                            
+                            IterateBack --> SnapPour
+                            
+                            Review -->|Yes| Complete([COMPLETE])
+                            
+                            style Start fill:#a8c5a8,stroke:#6b7c63,stroke-width:3px
+                            style Complete fill:#a8c5a8,stroke:#6b7c63,stroke-width:3px
+                            
+                            style InputDEM fill:#9eaeb3,stroke:#6b7c80,stroke-width:2px
+                            style InputPour fill:#9eaeb3,stroke:#6b7c80,stroke-width:2px
+                            style SearchDist fill:#9eaeb3,stroke:#6b7c80,stroke-width:2px
+                            style EnvMgr1 fill:#e8dcc8,stroke:#8b9d83,stroke-width:2px,stroke-dasharray: 5 5
+                            style EnvMgr2 fill:#e8dcc8,stroke:#8b9d83,stroke-width:2px,stroke-dasharray: 5 5
+                            
+                            style FillSinks fill:#c4d4bc,stroke:#8b9d83,stroke-width:2px
+                            style FlowDir fill:#c4d4bc,stroke:#8b9d83,stroke-width:2px
+                            style FlowAccum fill:#c4d4bc,stroke:#8b9d83,stroke-width:2px
+                            style SnapPour fill:#c4d4bc,stroke:#8b9d83,stroke-width:2px
+                            style Watershed fill:#c4d4bc,stroke:#8b9d83,stroke-width:2px
+                            
+                            style Review fill:#9eaeb3,stroke:#6b7c80,stroke-width:2px
+                            style IterateBack fill:#f4e8a0,stroke:#8b9d83,stroke-width:2px
+                    </div>
+                </div>
+            </div>
+
+            <!-- Code Implementation -->
+            <div class="code-section">
+                <div class="code-section-header">
+                    <h2 class="code-section-title">Python Implementation</h2>
+                    <span class="code-help-text">Feel free to copy and paste this in the Python window</span>
+                </div>
+                
+                <!-- Setup Cell -->
+                <div class="code-cell">
+                    <div class="code-cell-content">
+                        <pre class="code-block"><code><span class="comment"># set environments</span>
+<span class="keyword">import</span> arcpy
+<span class="keyword">from</span> arcpy.sa <span class="keyword">import</span> *
+
+arcpy.env.overwriteOutput = <span class="keyword">False</span>
+arcpy.CheckOutExtension(<span class="string">"spatial"</span>)
+arcpy.CheckOutExtension(<span class="string">"ImageAnalyst"</span>)
+
+<span class="comment"># import parameters</span>
+<span class="variable">DEM</span> = <span class="input-placeholder">*drag in DEM raster here*</span>
+<span class="variable">workingGDB</span> = <span class="input-placeholder">*drag in working GDB here*</span></code></pre>
+                    </div>
+                </div>
+
+                <!-- First Environment Setup Cell -->
+                <div class="code-cell">
+                    <div class="code-cell-content">
+                        <pre class="code-block"><code><span class="variable">dem_extent</span> = arcpy.Raster(<span class="variable">DEM</span>).extent
+
+<span class="keyword">with</span> arcpy.EnvManager(cellSize=<span class="string">"1"</span>, extent=<span class="variable">dem_extent</span>, 
+                      scratchWorkspace=<span class="variable">workingGDB</span>, 
+                      snapRaster=<span class="variable">DEM</span>, workspace=<span class="variable">workingGDB</span>):
+    
+    <span class="function">print</span>(<span class="string">"Filling Sinks"</span>)
+    <span class="variable">dem2</span> = arcpy.Raster(<span class="variable">DEM</span>)
+    <span class="variable">elev_fill</span> = arcpy.sa.<span class="function">Fill</span>(<span class="variable">dem2</span>, <span class="keyword">None</span>)
+
+    <span class="function">print</span>(<span class="string">"Calculating flow direction..."</span>)
+    <span class="variable">flow_dir</span> = arcpy.sa.<span class="function">FlowDirection</span>(<span class="variable">elev_fill</span>, <span class="string">"NORMAL"</span>, <span class="keyword">None</span>, <span class="string">"D8"</span>)
+    <span class="variable">flow_dir_path</span> = <span class="variable">workingGDB</span> + <span class="string">"\\FlowDiFill"</span>
+    <span class="variable">flow_dir</span>.save(<span class="variable">flow_dir_path</span>)
+
+    <span class="function">print</span>(<span class="string">"Calculating flow accumulation..."</span>)
+    <span class="variable">accum_flow</span> = arcpy.sa.<span class="function">FlowAccumulation</span>(<span class="variable">flow_dir</span>, <span class="string">""</span>, <span class="string">"FLOAT"</span>, <span class="string">"D8"</span>)
+    <span class="variable">accum_flow_path</span> = <span class="variable">workingGDB</span> + <span class="string">"\\AccumFlow"</span>
+    <span class="variable">accum_flow</span>.save(<span class="variable">accum_flow_path</span>)</code></pre>
+                    </div>
+                </div>
+
+                <!-- Second Environment Setup Cell -->
+                <div class="code-cell">
+                    <div class="code-cell-content">
+                        <pre class="code-block"><code><span class="variable">pourpoint</span> = <span class="input-placeholder">*drag in pour point here*</span>
+
+<span class="comment"># might need to play with this step</span>
+<span class="keyword">with</span> arcpy.EnvManager(cellSize=<span class="string">"30"</span>, extent=<span class="variable">dem_extent</span>, 
+                      scratchWorkspace=<span class="variable">workingGDB</span>,
+                      snapRaster=<span class="variable">DEM</span>, workspace=<span class="variable">workingGDB</span>):
+
+    <span class="function">print</span>(<span class="string">"Snapping pour point..."</span>)
+    <span class="variable">snap_pour_pt</span> = arcpy.sa.<span class="function">SnapPourPoint</span>(<span class="variable">pourpoint</span>, <span class="variable">accum_flow</span>, <span class="number">0</span>, <span class="string">"OBJECTID"</span>)
+
+    <span class="variable">wshed_path</span> = <span class="variable">workingGDB</span> + <span class="string">"\\WatershedfromDEM"</span>
+    <span class="function">print</span>(<span class="string">"Delineating watershed..."</span>)
+    <span class="variable">wshed</span> = arcpy.sa.<span class="function">Watershed</span>(<span class="variable">flow_dir</span>, <span class="variable">snap_pour_pt</span>, <span class="string">"VALUE"</span>)
+    <span class="variable">wshed</span>.save(<span class="variable">wshed_path</span>)
+    <span class="function">print</span>(<span class="string">"Complete. Watershed output saved to: "</span> + <span class="variable">wshed_path</span>)</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Legend Panel -->
+        <div class="legend">
+            <div class="legend-title">PROCESS TYPES</div>
+            
+            <div class="legend-item">
+                <div class="legend-shape">
+                    <div class="shape-rounded"></div>
+                </div>
+                <span>Start / End</span>
+            </div>
+
+            <div class="legend-item">
+                <div class="legend-shape">
+                    <div class="shape-box-dashed"></div>
+                </div>
+                <span>Environment Setup</span>
+            </div>
+
+            <div class="legend-item">
+                <div class="legend-shape">
+                    <div class="shape-box"></div>
+                </div>
+                <span>Tool</span>
+            </div>
+
+            <div class="legend-item">
+                <div class="legend-shape">
+                    <div class="shape-circle"></div>
+                </div>
+                <span>Input / Parameter</span>
+            </div>
+
+            <div class="legend-item">
+                <div class="legend-shape">
+                    <div class="shape-diamond"></div>
+                </div>
+                <span>Decision</span>
+            </div>
+
+            <div class="legend-item">
+                <div class="legend-shape">
+                    <div class="shape-parallelogram"></div>
+                </div>
+                <span>Adjustment</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            flowchart: { 
+                useMaxWidth: false,
+                htmlLabels: true,
+                curve: 'basis',
+                padding: 20
+            }
+        });
+
+        // Pan and zoom functionality
+        let scale = 1;
+        let panning = false;
+        let start = { x: 0, y: 0 };
+        let transformX = 0;
+        let transformY = 0;
+
+        const wrapper = document.getElementById('flowchart-wrapper');
+        const container = document.getElementById('flowchart-container');
+
+        wrapper.addEventListener('mousedown', (e) => {
+            panning = true;
+            start = { x: e.clientX - transformX, y: e.clientY - transformY };
+        });
+
+        wrapper.addEventListener('mouseup', () => {
+            panning = false;
+        });
+
+        wrapper.addEventListener('mousemove', (e) => {
+            if (!panning) return;
+            
+            transformX = e.clientX - start.x;
+            transformY = e.clientY - start.y;
+            
+            updateTransform();
+        });
+
+        wrapper.addEventListener('touchstart', (e) => {
+            panning = true;
+            const touch = e.touches[0];
+            start = { x: touch.clientX - transformX, y: touch.clientY - transformY };
+        });
+
+        wrapper.addEventListener('touchend', () => {
+            panning = false;
+        });
+
+        wrapper.addEventListener('touchmove', (e) => {
+            if (!panning) return;
+            
+            const touch = e.touches[0];
+            transformX = touch.clientX - start.x;
+            transformY = touch.clientY - start.y;
+            
+            updateTransform();
+        });
+
+        wrapper.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            scale *= delta;
+            scale = Math.min(Math.max(0.5, scale), 3);
+            
+            updateTransform();
+        });
+
+        function updateTransform() {
+            container.style.transform = `translate(${transformX}px, ${transformY}px) scale(${scale})`;
+        }
+    </script>
+</body>
+</html>

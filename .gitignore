@@ -1,0 +1,11 @@
+*.horizon
+*.xml
+*.spx
+*.freelist
+*.gdb*
+*.jpg
+Test/GpMessages/
+Test/.prj
+Test/.pyHistory
+Test/MyProject.aprx
+Test/MyProject.atbx

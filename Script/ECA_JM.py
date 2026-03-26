@@ -12,6 +12,7 @@
 #                  : (2025-09-10) add capacity to add own planned blocks feature class if not in LRM yes
 #                  : (2025-11-27) account for overlapping disturbance areas to prevent ECA over 100%
 #                  : (2025-12-03) switch to run off memory
+#                  : (2026-03-25) adjust for unburned fire areas to get a starting percent that is not "none"
 #=========================================================================================================
 
 import arcpy, pathlib, os, sys,csv,math

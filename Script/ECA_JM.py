@@ -14,8 +14,6 @@
 #                  : (2025-12-03) switch to run off memory
 #=========================================================================================================
 
-#mistake
-
 import arcpy, pathlib, os, sys,csv,math
 from pathlib import Path
 from arcpy import env
@@ -728,6 +726,12 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
                         SI = row[0]
                         height = row[2]
                         startingPercent = row[1]
+
+                        # prevent math domain errors
+                        if startingPercent is None or startingPercent <= 0:
+                            startingPercent = 0.1
+                        if startingPercent >= 100:
+                           startingPercent = 99.9
 
                         if SI is None:
                             SI = 12

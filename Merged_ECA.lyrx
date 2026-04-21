@@ -1,25 +1,25 @@
 {
   "type" : "CIMLayerDocument",
-  "version" : "3.4.0",
-  "build" : 55405,
+  "version" : "3.1.0",
+  "build" : 41833,
   "layers" : [
-    "CIMPATH=Map/MergedECA2.json"
+    "CIMPATH=chilako/mergedeca2.json"
   ],
   "layerDefinitions" : [
     {
       "type" : "CIMFeatureLayer",
-      "name" : "MergedECA",
-      "uRI" : "CIMPATH=Map/MergedECA2.json",
+      "name" : "Disturbance Area",
+      "uRI" : "CIMPATH=chilako/mergedeca2.json",
       "sourceModifiedTime" : {
         "type" : "TimeInstant",
-        "start" : -62135596800000
+        "start" : 978307200000
       },
       "metadataURI" : "CIMPATH=Metadata/851924f1960319e0af3f5a0e1be2cc87.xml",
       "useSourceMetadata" : true,
       "description" : "MergedECA",
       "layerElevation" : {
         "type" : "CIMLayerElevationSurface",
-        "elevationSurfaceLayerURI" : "CIMPATH=Map/e12ebe4445494172af485e11bff99838.json"
+        "elevationSurfaceLayerURI" : "CIMPATH=Map1/2561539b98fb48dfbf700a3524d2f6ed.json"
       },
       "expanded" : true,
       "layerType" : "Operational",
@@ -85,20 +85,6 @@
           },
           {
             "type" : "CIMFieldDescription",
-            "alias" : "SUM_ECA_Area",
-            "fieldName" : "SUM_ECA_Area",
-            "numberFormat" : {
-              "type" : "CIMNumericFormat",
-              "alignmentOption" : "esriAlignRight",
-              "alignmentWidth" : 0,
-              "roundingOption" : "esriRoundNumberOfDecimals",
-              "roundingValue" : 6
-            },
-            "visible" : true,
-            "searchMode" : "Exact"
-          },
-          {
-            "type" : "CIMFieldDescription",
             "alias" : "Shape_Length",
             "fieldName" : "Shape_Length",
             "numberFormat" : {
@@ -130,7 +116,7 @@
         ],
         "dataConnection" : {
           "type" : "CIMStandardDataConnection",
-          "workspaceConnectionString" : "DATABASE=.\\Test\\test_A2109_planned.gdb",
+          "workspaceConnectionString" : "DATABASE=..\\..\\..\\..\\tpg_root\\GIS_Workspace\\Tasks\\2026_8114_PLAN_ECA_Chilako_Nechako_JM\\Chilako.gdb",
           "workspaceFactory" : "FileGDB",
           "dataset" : "MergedECA",
           "datasetType" : "esriDTFeatureClass"
@@ -163,7 +149,6 @@
           "sortDirection" : "Ascending"
         }
       ],
-      "layerEffectsMode" : "Layer",
       "labelClasses" : [
         {
           "type" : "CIMLabelClass",
@@ -221,7 +206,6 @@
             "linePlacementMethod" : "OffsetCurvedFromLine",
             "maximumLabelOverrun" : 80,
             "maximumLabelOverrunUnit" : "Point",
-            "measureFromClippedFeatureGeometry" : true,
             "minimumFeatureSizeUnit" : "Map",
             "multiPartOption" : "OneLabelPerPart",
             "offsetAlongLineProperties" : {
@@ -382,11 +366,50 @@
           "iD" : -1
         }
       ],
-      "labelVisibility" : true,
       "renderer" : {
         "type" : "CIMClassBreaksRenderer",
         "barrierWeight" : "High",
+        "breaks" : [
+          {
+            "type" : "CIMClassBreak",
+            "label" : "0%",
+            "patch" : "Default",
+            "symbol" : {
+              "type" : "CIMSymbolReference",
+              "symbol" : {
+                "type" : "CIMPolygonSymbol",
+                "symbolLayers" : [
+                  {
+                    "type" : "CIMSolidStroke",
+                    "enable" : true,
+                    "capStyle" : "Round",
+                    "joinStyle" : "Round",
+                    "lineStyle3D" : "Strip",
+                    "miterLimit" : 10,
+                    "width" : 0.69999999999999996,
+                    "color" : {
+                      "type" : "CIMRGBColor",
+                      "values" : [
+                        130,
+                        130,
+                        130,
+                        100
+                      ]
+                    }
+                  },
+                  {
+                    "type" : "CIMSolidFill",
+                    "enable" : true
+                  }
+                ],
+                "angleAlignment" : "Map"
+              }
+            },
+            "upperBound" : 100
+          }
+        ],
         "classBreakType" : "UnclassedColor",
+        "classificationMethod" : "StandardDeviation",
         "colorRamp" : {
           "type" : "CIMMultipartColorRamp",
           "colorRamps" : [
@@ -447,53 +470,15 @@
           ]
         },
         "field" : "ECA_PERCENT",
-        "heading" : "ECA_PERCENT",
-        "minimumLabel" : "100",
-        "polygonSymbolColorTarget" : "Fill",
-        "drawGraduatedSymbolsAboveAllLayers" : true,
-        "classificationMethod" : "StandardDeviation",
-        "breaks" : [
-          {
-            "type" : "CIMClassBreak",
-            "label" : "0",
-            "patch" : "Default",
-            "symbol" : {
-              "type" : "CIMSymbolReference",
-              "symbol" : {
-                "type" : "CIMPolygonSymbol",
-                "symbolLayers" : [
-                  {
-                    "type" : "CIMSolidStroke",
-                    "enable" : true,
-                    "capStyle" : "Round",
-                    "joinStyle" : "Round",
-                    "lineStyle3D" : "Strip",
-                    "miterLimit" : 10,
-                    "width" : 0.69999999999999996,
-                    "height3D" : 1,
-                    "anchor3D" : "Center",
-                    "color" : {
-                      "type" : "CIMRGBColor",
-                      "values" : [
-                        130,
-                        130,
-                        130,
-                        100
-                      ]
-                    }
-                  },
-                  {
-                    "type" : "CIMSolidFill",
-                    "enable" : true
-                  }
-                ],
-                "angleAlignment" : "Map"
-              }
-            },
-            "upperBound" : 100
-          }
-        ],
+        "numberFormat" : {
+          "type" : "CIMNumericFormat",
+          "alignmentOption" : "esriAlignRight",
+          "alignmentWidth" : 0,
+          "roundingOption" : "esriRoundNumberOfDecimals",
+          "roundingValue" : 6
+        },
         "showInAscendingOrder" : true,
+        "heading" : "ECA Percentage",
         "defaultSymbolPatch" : "Default",
         "defaultSymbol" : {
           "type" : "CIMSymbolReference",
@@ -508,8 +493,6 @@
                 "lineStyle3D" : "Strip",
                 "miterLimit" : 10,
                 "width" : 0.69999999999999996,
-                "height3D" : 1,
-                "anchor3D" : "Center",
                 "color" : {
                   "type" : "CIMRGBColor",
                   "values" : [
@@ -537,15 +520,9 @@
             "angleAlignment" : "Map"
           }
         },
+        "minimumLabel" : "100%",
         "defaultLabel" : "<null>",
-        "numberFormat" : {
-          "type" : "CIMNumericFormat",
-          "alignmentOption" : "esriAlignRight",
-          "alignmentWidth" : 0,
-          "roundingOption" : "esriRoundNumberOfDecimals",
-          "roundingValue" : 6
-        },
-        "alwaysUpdateClassLabels" : true,
+        "polygonSymbolColorTarget" : "Fill",
         "sampleSize" : 10000,
         "normalizationType" : "Nothing",
         "useExclusionSymbol" : false,
@@ -641,10 +618,7 @@
     {
       "type" : "CIMElevationSurfaceLayer",
       "name" : "Ground",
-      "uRI" : "CIMPATH=Map/e12ebe4445494172af485e11bff99838.json",
-      "sourceModifiedTime" : {
-        "type" : "TimeInstant"
-      },
+      "uRI" : "CIMPATH=Map1/2561539b98fb48dfbf700a3524d2f6ed.json",
       "useSourceMetadata" : true,
       "description" : "Ground",
       "expanded" : true,

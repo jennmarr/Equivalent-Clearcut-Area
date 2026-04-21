@@ -13,6 +13,7 @@
 #                  : (2025-11-27) account for overlapping disturbance areas to prevent ECA over 100%
 #                  : (2025-12-03) switch to run off memory
 #                  : (2026-03-25) adjust for unburned fire areas to get a starting percent that is not "none"
+#                  : (2026-04-16) add options to not include pests data, don't know how reliable this is 
 #=========================================================================================================
 
 import arcpy, pathlib, os, sys,csv,math
@@ -105,6 +106,36 @@ def writetoExcel(watershed, inECAMerged, subBasin, subBasinName, outputExcelName
 
     ecaPercent = (totalECA / watershedAreaHa) * 100
 
+    originNameLookup = {
+        'rd': 'Roads',
+        'rail': 'Railways',
+        'tranL': 'Transmission Lines',
+        'pipeL': 'Pipelines',
+        'private': 'Private Land',
+        'pest': 'Pests',
+        'consolidatedBlk': 'Consolidated Cutblocks',
+        'bctsBlk': 'BCTS Blocks',
+        'fire': 'Fire',
+        'vri': 'VRI'
+    }
+    originSummary = {}
+    with arcpy.da.SearchCursor(inECAMerged, ['Origin', 'SUM_ECA_Area_ADJ']) as cursor:
+        for row in cursor:
+            origin = row[0]
+            ecaArea = row[1]
+            if origin is None or ecaArea is None:
+                continue
+            if origin in originSummary:
+                originSummary[origin] += ecaArea
+            else:
+                originSummary[origin] = ecaArea
+
+    originSummaryRows = []
+    for origin, ecaArea in sorted(originSummary.items(), key=lambda item: item[1], reverse=True):
+        originPercent = (ecaArea / watershedAreaHa) * 100 if watershedAreaHa else 0
+        originLabel = originNameLookup.get(origin, origin)
+        originSummaryRows.append([originLabel, ecaArea, originPercent])
+
 
     # CSV output
     nameString = 'Watershed Name'   
@@ -145,10 +176,12 @@ def writetoExcel(watershed, inECAMerged, subBasin, subBasinName, outputExcelName
 
     # Collect all rows to write (as lists of values)
     rows = []
+    header_rows = set()
 
     # Main watershed summary headers and data
     headers = ['Watershed Name', 'Watershed Area', 'Disturbance Area', 'ECA Area', 'ECA Percent']
     rows.append(headers)
+    header_rows.add(len(rows))
     rows.append(['Full Watershed', watershedAreaHa, disturbanceArea, totalECA, ecaPercent])
 
     # Optional sub-basin data
@@ -156,9 +189,18 @@ def writetoExcel(watershed, inECAMerged, subBasin, subBasinName, outputExcelName
         rows.append([])  # blank line
         sub_headers = ['Sub Basin Name', 'Sub Basin Area', 'Sub Basin Disturbance', 'Sub Basin ECA', 'Sub Basin ECA Percent']
         rows.append(sub_headers)
+        header_rows.add(len(rows))
 
         for key in sorted(basinDict.keys()):
             rows.append([key] + basinDict[key])
+
+    if originSummaryRows:
+        rows.append([])
+        source_headers = ['Disturbance Source', 'ECA Area', 'ECA Percent']
+        rows.append(source_headers)
+        header_rows.add(len(rows))
+        for summaryRow in originSummaryRows:
+            rows.append(summaryRow)
 
     # Write rows to sheet
     for row_index, row_data in enumerate(rows, start=1):
@@ -168,7 +210,7 @@ def writetoExcel(watershed, inECAMerged, subBasin, subBasinName, outputExcelName
             cell = ws.cell(row=row_index, column=col_index, value=value)
 
             # Style header rows
-            if row_index in [1, 4]:  # First and sub-basin header row
+            if row_index in header_rows:
                 cell.fill = header_fill
                 cell.font = header_font
 
@@ -300,7 +342,7 @@ def createH60(dem, geodatabase):
 
 
 #--------------------------------------------------------------Creates Base data, and runs the rest of the tools, such as H60 and the ECA Calculation
-def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,growthFactor,assessYear,PlannedBlock,PlannedBlockFeatureClass):
+def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,growthFactor,assessYear,PlannedBlock,PlannedBlockFeatureClass,includePests='Yes'):
     global geodatabase
     
     #--------------------------DATA SETUP------------------------------------
@@ -473,8 +515,11 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
         whereBlock = '''CUTB_BLOCK_STATE IN ('ADV','LC','HB')''' #+ ''' AND  + '''HVS_STATUS_DATE >= timestamp '''+ "'" + str(filterYear) + '-01-01 12:00:00' + "'"
     elif PlannedBlock == 'WIP Only':
         whereBlock = '''CUTB_BLOCK_STATE IN ('ADV','LC','HB','WIP')'''
-    else:
+    elif PlannedBlock == 'Yes':
         whereBlock = '''CUTB_BLOCK_STATE IN ('ADV','LC','HB','PP','WIP')'''
+    else:
+        arcpy.AddError("Script is unsure whether to include planned blocks. Please set the Planned Block parameter to 'No', 'WIP Only', or 'Yes'.")
+        sys.exit(1)
 
     arcpy.AddMessage(whereBlock)
     
@@ -490,13 +535,22 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
     erasedBCTSBlocks = 'bctsBlocks_Erased'
     arcpy.analysis.Erase(selectBlock,selectSu,erasedBCTSBlocks)
 
-    #add capacity to add own planned blocks feature class if not in LRM yes
+    #add capacity to add own planned blocks feature class if not in LRM yet
     if PlannedBlockFeatureClass in ('', '#', None):
         pass
     else:
+        arcpy.AddMessage('Adding Planned Block Feature class')
         #clip planned blocks to watershed
         plannedBlocks_Clip = 'plannedBlocks_Clip'
         arcpy.analysis.PairwiseClip(PlannedBlockFeatureClass, watershedFeature, plannedBlocks_Clip)
+
+        # Ensure required fields exist for downstream bctsBlk recovery logic.
+        planned_field_names = {field.name.upper() for field in arcpy.ListFields(plannedBlocks_Clip)}
+        required_fields = {'HVS_STATUS', 'HVS_STATUS_DATE'}
+        missing_fields = sorted(required_fields - planned_field_names)
+        if missing_fields:
+            arcpy.AddError('Planned Block Feature Class is missing required field(s). Required fields: HVS_STATUS, HVS_STATUS_DATE.')
+            sys.exit(1)
         
         #merge with erasedBCTSBlocks
         mergedBCTSBlocks = 'bctsBlocks_Merged_Planned'
@@ -541,10 +595,10 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
             self.name = name
             
             #Create a field for the Source
-            arcpy.management.AddField(self.featureClass,'Origin','TEXT')
+            arcpy.management.AddField(self.featureClass,'Origin','TEXT', field_length=25)
             arcpy.management.CalculateField(self.featureClass, 'Origin', '"'+self.name +'"', "PYTHON3")
             #create field of interest for factors that have an attribute field that adjusts starting percent
-            arcpy.management.AddField(self.featureClass,'FieldOI','TEXT')
+            arcpy.management.AddField(self.featureClass,'FieldOI','TEXT', field_length=50)
             if self.name == 'fire':
                 arcpy.management.CalculateField(self.featureClass, 'FieldOI', '!BURN_SEVERITY_RATING!', "PYTHON3")
             elif self.name == 'pest':
@@ -690,10 +744,13 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
 
                     with arcpy.da.UpdateCursor(self.featureClass,yearofDistFields) as cursor: #yearofDistFields will look like ['HVS_STATUS_DATE','HVS_STATUS','CURR_HEIGHT','YearofDisturbance'] for bctsBlk
                         for row in cursor:
-                            if row[1] == 'P':
+                            if row[1] == 'P': #planned
                                 startYear = assessYear  
                             else:
-                                plantedYear = int(row[0].year) + 2
+                                if row[0] is None: #not planned but no harvest started date - removed
+                                    cursor.deleteRow()
+                                    continue
+                                plantedYear = int(row[0].year) + 2 
                                 if plantedYear > assessYear:
                                     startYear = assessYear
                                 else:
@@ -818,8 +875,13 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
             else:
                 dissolveFields = ['Origin','Above_H60','ECA_PERCENT','ECA_Area','YearofDisturbance','FieldOI']
 
-            dissolvedECA = self.name + "ECA"
-            arcpy.analysis.PairwiseDissolve(self.featureClass, dissolvedECA, dissolveFields)
+            # Write dissolve output to disk (GDB) instead of in_memory to avoid RAM exhaustion.
+            dissolvedECA = os.path.join(geodatabase, self.name + "ECA")
+            try:
+                arcpy.analysis.PairwiseDissolve(self.featureClass, dissolvedECA, dissolveFields)
+            except arcpy.ExecuteError:
+                arcpy.AddWarning('PairwiseDissolve failed for ' + self.name + '; retrying with Dissolve.')
+                arcpy.management.Dissolve(self.featureClass, dissolvedECA, dissolveFields)
             self.featureClass = dissolvedECA
 
 
@@ -848,11 +910,14 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
     # end of nonrecovering
     #--------------------------------------------------
                      
-    arcpy.AddMessage('Adding Pests ECA Factor')
-    pests = Factor('pest',mergePests,'recovering')
-    pests.recover(['CAPTURE_YEAR'])
-    pests.calculateECApercentage()
-    pests.calculateECAarea()
+    if includePests == 'Yes':
+        arcpy.AddMessage('Adding Pests ECA Factor')
+        pests = Factor('pest',mergePests,'recovering')
+        pests.recover(['CAPTURE_YEAR'])
+        pests.calculateECApercentage()
+        pests.calculateECAarea()
+    else:
+        arcpy.AddMessage('Skipping Pests ECA Factor')
 
     arcpy.AddMessage('Adding Consolidate Blocks ECA Factor')
     conBlocks = Factor('consolidatedBlk',ConBlocksNoBCTS,'recovering')
@@ -871,7 +936,11 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
     arcpy.Erase_analysis(mergeFires,mergeBurnSeverity,firesMinusBS)
     #merge burn severity and fires.  both still have 'FIRE_YEAR' field
     mergeBSandFires = 'mergeBSandFires'
-    arcpy.management.Merge([firesMinusBS,mergeBurnSeverity],mergeBSandFires)
+    # remove unburned areas from burn severity before merging - this should erase them above, but don't add them back in
+    burnSeverityBurned = 'burnSeverityBurned'
+    arcpy.conversion.ExportFeatures(mergeBurnSeverity, burnSeverityBurned, "BURN_SEVERITY_RATING <> 'Unburned'")
+    arcpy.management.Merge([firesMinusBS,burnSeverityBurned],mergeBSandFires)
+
 
     arcpy.AddMessage('Adding Fires ECA Factor')
     fires = Factor('fire',mergeBSandFires,'recovering') 
@@ -983,7 +1052,8 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
 
     #join adjustment factor back to main ECA layer
     DisturbanceLayer_with_adjustment = os.path.join(geodatabase, 'DisturbanceLayer_Adjusted')
-    arcpy.analysis.Intersect(in_features=[DisturbanceLayer, ECAcheck100], out_feature_class=DisturbanceLayer_with_adjustment)
+    # arcpy.analysis.Intersect(in_features=[DisturbanceLayer, ECAcheck100], out_feature_class=DisturbanceLayer_with_adjustment)
+    arcpy.analysis.Identity(in_features=DisturbanceLayer, identity_features=ECAcheck100, out_feature_class=DisturbanceLayer_with_adjustment)
 
 
     #add adjusted ECA fields
@@ -991,10 +1061,16 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
     arcpy.management.AddField(DisturbanceLayer_with_adjustment, "ECA_Area_ADJ", "DOUBLE")
 
     #select features with adjustment factor and calculate adjusted ECA values
-    DisturbanceLayer_selection = arcpy.management.SelectLayerByAttribute(in_layer_or_view=DisturbanceLayer_with_adjustment, selection_type="NEW_SELECTION", where_clause="ADJUST_FACTOR IS NOT NULL")
+    DisturbanceLayer_selection = arcpy.management.SelectLayerByAttribute(in_layer_or_view=DisturbanceLayer_with_adjustment, selection_type="NEW_SELECTION", where_clause="FID_ECA_DL_Check100 <> -1")
 
     arcpy.management.CalculateField(in_table=DisturbanceLayer_selection, field="ECA_PERCENT_ADJ", expression="!ECA_PERCENT! * !ADJUST_FACTOR!", expression_type="PYTHON3")
     arcpy.management.CalculateField(in_table=DisturbanceLayer_selection, field="ECA_Area_ADJ", expression="!ECA_PERCENT_ADJ!/100 * !Shape_Area!/10000", expression_type="PYTHON3")
+
+    #repeat for areas with no adjustment factor, just carry over ECA_PERCENT and ECA_Area as ECA_PERCENT_ADJ and ECA_Area_ADJ
+    DisturbanceLayer_selection = arcpy.management.SelectLayerByAttribute(in_layer_or_view=DisturbanceLayer_with_adjustment, selection_type="NEW_SELECTION", where_clause="FID_ECA_DL_Check100 = -1")
+
+    arcpy.management.CalculateField(in_table=DisturbanceLayer_selection, field="ECA_PERCENT_ADJ", expression="!ECA_PERCENT!", expression_type="PYTHON3")
+    arcpy.management.CalculateField(in_table=DisturbanceLayer_selection, field="ECA_Area_ADJ", expression="!ECA_Area!", expression_type="PYTHON3")
 
         
 
@@ -1023,6 +1099,8 @@ subBasin = arcpy.GetParameterAsText(7)
 subBasinName = arcpy.GetParameterAsText(8)
 PlannedBlock = arcpy.GetParameterAsText(9)
 PlannedBlockFeatureClass = arcpy.GetParameterAsText(10)
+includePests = arcpy.GetParameterAsText(11)
+
 
 # env.workspace = geodatabase
 arcpy.env.workspace = 'in_memory'
@@ -1037,7 +1115,7 @@ delete()
 arcpy.AddMessage('Creating H60 Data')  
 createH60(DEM, geodatabase)
 
-createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,growthFactor,assessYear,PlannedBlock, PlannedBlockFeatureClass)
+createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,growthFactor,assessYear,PlannedBlock, PlannedBlockFeatureClass, includePests)
 
 #=============================================================================
 # Get the geodatabase name to name the output spreadsheet after it

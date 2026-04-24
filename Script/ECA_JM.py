@@ -13,7 +13,9 @@
 #                  : (2025-11-27) account for overlapping disturbance areas to prevent ECA over 100%
 #                  : (2025-12-03) switch to run off memory
 #                  : (2026-03-25) adjust for unburned fire areas to get a starting percent that is not "none"
-#                  : (2026-04-16) add options to not include pests data, don't know how reliable this is 
+#                  : (2026-04-16) add options to not include pests data, don't know how reliable this is.  Summarize results based on features that affect ECA values
+#                  : (2026-04-23) remove pest and VRI disturbance factors since they are not reliable data 
+#                  : (2026-04-23) add sub basins field for calculating adjusted_eca for blocks with no overlap - missed on April 16th
 #=========================================================================================================
 
 import arcpy, pathlib, os, sys,csv,math
@@ -342,7 +344,7 @@ def createH60(dem, geodatabase):
 
 
 #--------------------------------------------------------------Creates Base data, and runs the rest of the tools, such as H60 and the ECA Calculation
-def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,growthFactor,assessYear,PlannedBlock,PlannedBlockFeatureClass,includePests='Yes'):
+def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,growthFactor,assessYear,PlannedBlock,PlannedBlockFeatureClass):
     global geodatabase
     
     #--------------------------DATA SETUP------------------------------------
@@ -627,6 +629,8 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
                                 row[1] = 40
                             elif severity == 'Very Severe':
                                 row[1] = 60
+                            elif severity is None: #prevent math domain errors
+                                row[1] = 0
                             cursor.updateRow(row)
 
                 elif self.name == 'consolidatedBlk' or self.name == 'bctsBlk':
@@ -727,7 +731,7 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
                 arcpy.management.CalculateField(self.featureClass, 'CURR_HEIGHT', '!PROJ_HEIGHT_1!', "PYTHON3") #set current height to PROJ_HEIGHT_1
                 
 
-        def recover(self,yearofDistFields) -> None: #outputs a height\
+        def recover(self,yearofDistFields) -> None: #outputs a height
 
             arcpy.AddMessage('Recovering ' + self.name)
             
@@ -785,11 +789,11 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
                         height = row[2]
                         startingPercent = row[1]
 
-                        # prevent math domain errors
-                        if startingPercent is None or startingPercent <= 0:
-                            startingPercent = 0.1
-                        if startingPercent >= 100:
-                           startingPercent = 99.9
+                        # # prevent math domain errors
+                        # if startingPercent is None or startingPercent <= 0:
+                        #     startingPercent = 0.1
+                        # if startingPercent >= 100:
+                        #    startingPercent = 99.9
 
                         if SI is None:
                             SI = 12
@@ -910,14 +914,11 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
     # end of nonrecovering
     #--------------------------------------------------
                      
-    if includePests == 'Yes':
-        arcpy.AddMessage('Adding Pests ECA Factor')
-        pests = Factor('pest',mergePests,'recovering')
-        pests.recover(['CAPTURE_YEAR'])
-        pests.calculateECApercentage()
-        pests.calculateECAarea()
-    else:
-        arcpy.AddMessage('Skipping Pests ECA Factor')
+    # arcpy.AddMessage('Adding Pests ECA Factor')
+    # pests = Factor('pest',mergePests,'recovering')
+    # pests.recover(['CAPTURE_YEAR'])
+    # pests.calculateECApercentage()
+    # pests.calculateECAarea()
 
     arcpy.AddMessage('Adding Consolidate Blocks ECA Factor')
     conBlocks = Factor('consolidatedBlk',ConBlocksNoBCTS,'recovering')
@@ -948,10 +949,10 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
     fires.calculateECApercentage()
     fires.calculateECAarea()
 
-    arcpy.AddMessage('Adding Young VRI ECA Factor')
-    youngVRIareas = Factor('vri',youngVRI,'recovering') 
-    youngVRIareas.calculateECApercentage() 
-    youngVRIareas.calculateECAarea()
+    # arcpy.AddMessage('Adding Young VRI ECA Factor')
+    # youngVRIareas = Factor('vri',youngVRI,'recovering') 
+    # youngVRIareas.calculateECApercentage() 
+    # youngVRIareas.calculateECAarea()
     
 
     #=============================================================================
@@ -1061,13 +1062,20 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
     arcpy.management.AddField(DisturbanceLayer_with_adjustment, "ECA_Area_ADJ", "DOUBLE")
 
     #select features with adjustment factor and calculate adjusted ECA values
-    DisturbanceLayer_selection = arcpy.management.SelectLayerByAttribute(in_layer_or_view=DisturbanceLayer_with_adjustment, selection_type="NEW_SELECTION", where_clause="FID_ECA_DL_Check100 <> -1")
+    if subBasin == 'Yes':
+        arcpy.AddMessage('Selecting features with adjustment factor for sub-basin analysis')
+        fid_field = "FID_ECA_DL_Check100_Subbasins" 
+
+    else:
+        fid_field = "FID_ECA_DL_Check100"
+
+    DisturbanceLayer_selection = arcpy.management.SelectLayerByAttribute(in_layer_or_view=DisturbanceLayer_with_adjustment, selection_type="NEW_SELECTION", where_clause=f"{fid_field} <> -1") 
 
     arcpy.management.CalculateField(in_table=DisturbanceLayer_selection, field="ECA_PERCENT_ADJ", expression="!ECA_PERCENT! * !ADJUST_FACTOR!", expression_type="PYTHON3")
     arcpy.management.CalculateField(in_table=DisturbanceLayer_selection, field="ECA_Area_ADJ", expression="!ECA_PERCENT_ADJ!/100 * !Shape_Area!/10000", expression_type="PYTHON3")
 
     #repeat for areas with no adjustment factor, just carry over ECA_PERCENT and ECA_Area as ECA_PERCENT_ADJ and ECA_Area_ADJ
-    DisturbanceLayer_selection = arcpy.management.SelectLayerByAttribute(in_layer_or_view=DisturbanceLayer_with_adjustment, selection_type="NEW_SELECTION", where_clause="FID_ECA_DL_Check100 = -1")
+    DisturbanceLayer_selection = arcpy.management.SelectLayerByAttribute(in_layer_or_view=DisturbanceLayer_with_adjustment, selection_type="NEW_SELECTION", where_clause=f"{fid_field} = -1")
 
     arcpy.management.CalculateField(in_table=DisturbanceLayer_selection, field="ECA_PERCENT_ADJ", expression="!ECA_PERCENT!", expression_type="PYTHON3")
     arcpy.management.CalculateField(in_table=DisturbanceLayer_selection, field="ECA_Area_ADJ", expression="!ECA_Area!", expression_type="PYTHON3")
@@ -1099,7 +1107,7 @@ subBasin = arcpy.GetParameterAsText(7)
 subBasinName = arcpy.GetParameterAsText(8)
 PlannedBlock = arcpy.GetParameterAsText(9)
 PlannedBlockFeatureClass = arcpy.GetParameterAsText(10)
-includePests = arcpy.GetParameterAsText(11)
+createH60_parameter = arcpy.GetParameterAsText(11)
 
 
 # env.workspace = geodatabase
@@ -1113,9 +1121,13 @@ delete()
 
 #----------------------------Create H60 Data ---------------------------------------
 arcpy.AddMessage('Creating H60 Data')  
-createH60(DEM, geodatabase)
 
-createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,growthFactor,assessYear,PlannedBlock, PlannedBlockFeatureClass, includePests)
+if createH60_parameter == 'Yes':
+    createH60(DEM, geodatabase)
+else:
+    arcpy.AddMessage('Using existing H60 data in geodatabase. Ensure it is named "Upper_H60" and is clipped to the watershed.')
+
+createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,growthFactor,assessYear,PlannedBlock, PlannedBlockFeatureClass)
 
 #=============================================================================
 # Get the geodatabase name to name the output spreadsheet after it

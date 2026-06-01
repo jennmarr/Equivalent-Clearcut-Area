@@ -875,9 +875,12 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
                     cursor.updateRow(row)
 
             if subBasin == 'Yes':
-                dissolveFields = ['Origin','Above_H60',subBasinName,'ECA_PERCENT','ECA_Area','YearofDisturbance','FieldOI']                   
+                # dissolveFields = ['Origin','Above_H60',subBasinName,'ECA_PERCENT','ECA_Area','YearofDisturbance','FieldOI']                        
+                dissolveFields = ['Origin','Above_H60',subBasinName,'ECA_PERCENT','ECA_Area','YearofDisturbance','FieldOI','CURR_HEIGHT','SITE_INDEX']      #FOR WILL     
             else:
-                dissolveFields = ['Origin','Above_H60','ECA_PERCENT','ECA_Area','YearofDisturbance','FieldOI']
+                # dissolveFields = ['Origin','Above_H60','ECA_PERCENT','ECA_Area','YearofDisturbance','FieldOI']
+                dissolveFields = ['Origin','Above_H60','ECA_PERCENT','ECA_Area','YearofDisturbance','FieldOI','CURR_HEIGHT','SITE_INDEX']      #FOR WILL
+
 
             # Write dissolve output to disk (GDB) instead of in_memory to avoid RAM exhaustion.
             dissolvedECA = os.path.join(geodatabase, self.name + "ECA")
@@ -984,18 +987,32 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
 
     # intersect to find overlapping polygons, then go through a series of steps that will results in a feature class where shared boundaries have a unique ID
     arcpy.analysis.Intersect(in_features=DisturbanceLayer, out_feature_class=ECAcheck100_Intermediate) 
-    arcpy.management.CopyFeatures(ECAcheck100_Intermediate, ECA_DisturbanceIntersected) #will use later
 
-    arcpy.management.DeleteIdentical(in_dataset=ECAcheck100_Intermediate,fields="Shape")
-    arcpy.management.CalculateField(in_table=ECAcheck100_Intermediate, field="Boundary", expression='"B"+str(!OBJECTID!)', expression_type="PYTHON3")
-    arcpy.analysis.PairwiseDissolve(in_features=ECAcheck100_Intermediate, out_feature_class=ECAcheck100_Intermediate1, dissolve_field="Boundary", statistics_fields=None, multi_part="MULTI_PART")
+    overlapfeature_Count = int(arcpy.management.GetCount(ECAcheck100_Intermediate)[0])
+    if overlapfeature_Count == 0:
+        arcpy.AddMessage('No overlapping disturbance factors, do not need to adjust ECA percentages')
+        arcpy.management.CopyFeatures(DisturbanceLayer, ECAcheck100) #final
 
-    # identity back to get ECA_PERCENT for overlapping features
-    arcpy.analysis.Identity(in_features=ECA_DisturbanceIntersected, identity_features=ECAcheck100_Intermediate1, out_feature_class=ECAcheck100_Intermediate2)
+        # just calculate these now to match ECA Percent and set adjustment factor to 1.0 meaning unadjusted
+        arcpy.management.AddField(ECAcheck100, 'SUM_ECA_PERCENT', 'FLOAT')
+        arcpy.management.CalculateField(ECAcheck100, 'SUM_ECA_PERCENT', '!ECA_PERCENT!', 'PYTHON3')
+        arcpy.management.AddField(ECAcheck100, 'ADJUST_FACTOR', 'FLOAT')
+        arcpy.management.CalculateField(ECAcheck100, 'ADJUST_FACTOR', '1', 'PYTHON3')
+        
 
-    # dissolve based on an attribute field that groups together identical polygons
-    ECAcheck100 = os.path.join(geodatabase, 'ECA_DL_Check100')
-    arcpy.analysis.PairwiseDissolve(in_features=ECAcheck100_Intermediate2, out_feature_class=ECAcheck100, dissolve_field="Boundary", statistics_fields="ECA_PERCENT SUM")
+    else:
+        arcpy.management.CopyFeatures(ECAcheck100_Intermediate, ECA_DisturbanceIntersected) #will use later
+
+        arcpy.management.DeleteIdentical(in_dataset=ECAcheck100_Intermediate,fields="Shape")
+        arcpy.management.CalculateField(in_table=ECAcheck100_Intermediate, field="Boundary", expression='"B"+str(!OBJECTID!)', expression_type="PYTHON3")
+        arcpy.analysis.PairwiseDissolve(in_features=ECAcheck100_Intermediate, out_feature_class=ECAcheck100_Intermediate1, dissolve_field="Boundary", statistics_fields=None, multi_part="MULTI_PART")
+
+        # identity back to get ECA_PERCENT for overlapping features
+        arcpy.analysis.Identity(in_features=ECA_DisturbanceIntersected, identity_features=ECAcheck100_Intermediate1, out_feature_class=ECAcheck100_Intermediate2)
+
+        # dissolve based on an attribute field that groups together identical polygons
+        ECAcheck100 = os.path.join(geodatabase, 'ECA_DL_Check100')
+        arcpy.analysis.PairwiseDissolve(in_features=ECAcheck100_Intermediate2, out_feature_class=ECAcheck100, dissolve_field="Boundary", statistics_fields="ECA_PERCENT SUM")
 
     #=============================================================================
     # identity to subbasins if needed
@@ -1053,9 +1070,7 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
 
     #join adjustment factor back to main ECA layer
     DisturbanceLayer_with_adjustment = os.path.join(geodatabase, 'DisturbanceLayer_Adjusted')
-    # arcpy.analysis.Intersect(in_features=[DisturbanceLayer, ECAcheck100], out_feature_class=DisturbanceLayer_with_adjustment)
     arcpy.analysis.Identity(in_features=DisturbanceLayer, identity_features=ECAcheck100, out_feature_class=DisturbanceLayer_with_adjustment)
-
 
     #add adjusted ECA fields
     arcpy.management.AddField(DisturbanceLayer_with_adjustment, "ECA_PERCENT_ADJ", "FLOAT")
@@ -1087,9 +1102,9 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
 
     mergedECA = os.path.join(geodatabase, 'MergedECA')
     if subBasin == 'Yes':
-        arcpy.management.Dissolve(in_features=DisturbanceLayer_with_adjustment, out_feature_class=mergedECA, dissolve_field=["Origin","ECA_PERCENT", "ECA_PERCENT_ADJ","Above_H60","YearofDisturbance","FieldOI",subBasinName], statistics_fields="ECA_Area_ADJ SUM", multi_part="MULTI_PART")
+        arcpy.management.Dissolve(in_features=DisturbanceLayer_with_adjustment, out_feature_class=mergedECA, dissolve_field=["Origin","ECA_PERCENT", "ECA_PERCENT_ADJ","CURR_HEIGHT","Above_H60","YearofDisturbance","FieldOI",subBasinName], statistics_fields="ECA_Area_ADJ SUM", multi_part="MULTI_PART")
     else:
-        arcpy.management.Dissolve(in_features=DisturbanceLayer_with_adjustment, out_feature_class=mergedECA, dissolve_field=["Origin","ECA_PERCENT", "ECA_PERCENT_ADJ","Above_H60","YearofDisturbance","FieldOI"], statistics_fields="ECA_Area_ADJ SUM", multi_part="MULTI_PART")
+        arcpy.management.Dissolve(in_features=DisturbanceLayer_with_adjustment, out_feature_class=mergedECA, dissolve_field=["Origin","ECA_PERCENT", "ECA_PERCENT_ADJ","CURR_HEIGHT","Above_H60","YearofDisturbance","FieldOI"], statistics_fields="ECA_Area_ADJ SUM", multi_part="MULTI_PART")
             
     
     return mergedECA

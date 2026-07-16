@@ -16,6 +16,7 @@
 #                  : (2026-04-16) add options to not include pests data, don't know how reliable this is.  Summarize results based on features that affect ECA values
 #                  : (2026-04-23) remove pest and VRI disturbance factors since they are not reliable data 
 #                  : (2026-04-23) add sub basins field for calculating adjusted_eca for blocks with no overlap - missed on April 16th
+#                  : (2026-07-16) added RG to BCTS blocks since some RG blocks were not in consolidated 
 #=========================================================================================================
 
 import arcpy, pathlib, os, sys,csv,math
@@ -514,11 +515,11 @@ def createData(bcgwConnection,dbp06Connection,watershed,subBasin,subBasinName,gr
     #------------------------ BCTS Blocks Remove WTRA/WTP/NP--------------------------
     arcpy.AddMessage('Creating Block Data')
     if PlannedBlock == 'No':
-        whereBlock = '''CUTB_BLOCK_STATE IN ('ADV','LC','HB')''' #+ ''' AND  + '''HVS_STATUS_DATE >= timestamp '''+ "'" + str(filterYear) + '-01-01 12:00:00' + "'"
+        whereBlock = '''CUTB_BLOCK_STATE IN ('ADV','LC','HB','RG')''' #noticed some RG blocks were not in consolidated??  So added them here.  Are erased later to avoid double counting if in both
     elif PlannedBlock == 'WIP Only':
-        whereBlock = '''CUTB_BLOCK_STATE IN ('ADV','LC','HB','WIP')'''
+        whereBlock = '''CUTB_BLOCK_STATE IN ('ADV','LC','HB','WIP','RG')'''
     elif PlannedBlock == 'Yes':
-        whereBlock = '''CUTB_BLOCK_STATE IN ('ADV','LC','HB','PP','WIP')'''
+        whereBlock = '''CUTB_BLOCK_STATE IN ('ADV','LC','HB','PP','WIP','RG')'''
     else:
         arcpy.AddError("Script is unsure whether to include planned blocks. Please set the Planned Block parameter to 'No', 'WIP Only', or 'Yes'.")
         sys.exit(1)
